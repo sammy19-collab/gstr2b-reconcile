@@ -1,9 +1,20 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 
+from app.database import engine, Base
+import app.models  # noqa: registers all models
 from app.routers import auth, clients, uploads, reconcile, reports
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="GST Reconcile AI",
     description="Automated GSTR-2B reconciliation platform",
     version="0.1.0",
