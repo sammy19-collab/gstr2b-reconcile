@@ -104,6 +104,9 @@ def clean_purchase_df(df: pd.DataFrame) -> pd.DataFrame:
     else:
         df["invoice_date"] = None
 
+    # For Tally exports, taxable_amount is mapped from Credit (full invoice total)
+    df["invoice_total"] = df["taxable_amount"].fillna(0)
+
     return df
 
 
@@ -143,5 +146,11 @@ def clean_gstr2b_df(df: pd.DataFrame) -> pd.DataFrame:
         df["invoice_date"] = df["invoice_date"].apply(parse_date)
     else:
         df["invoice_date"] = None
+
+    # invoice_total = taxable value + all taxes (full invoice value for amount matching)
+    df["invoice_total"] = (
+        df["taxable_amount"].fillna(0)
+        + df["total_tax"].fillna(0)
+    )
 
     return df

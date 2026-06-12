@@ -19,6 +19,7 @@ def stage_0_duplicates(df: pd.DataFrame, id_col: str = "id") -> Tuple[pd.DataFra
     """
     Detect duplicate invoices within a dataset.
     Duplicates are identified by same (supplier_gstin_norm, invoice_number_norm).
+    Rows where ALL key columns are empty are never flagged as duplicates.
 
     Returns:
         clean_df: DataFrame with duplicates removed (keeping first)
@@ -30,9 +31,21 @@ def stage_0_duplicates(df: pd.DataFrame, id_col: str = "id") -> Tuple[pd.DataFra
     if not available_keys:
         return df, pd.DataFrame()
 
-    mask = df.duplicated(subset=available_keys, keep="first")
-    clean_df = df[~mask].copy()
-    duplicates_df = df[mask].copy()
+    # Only deduplicate rows that have at least one non-empty key
+    has_key = df[available_keys].apply(
+        lambda row: any(str(v).strip() not in ("", "nan") for v in row), axis=1
+    )
+    df_keyed = df[has_key]
+    df_no_key = df[~has_key]
+
+    if df_keyed.empty:
+        return df, pd.DataFrame()
+
+    mask = df_keyed.duplicated(subset=available_keys, keep="first")
+    clean_keyed = df_keyed[~mask]
+    duplicates_df = df_keyed[mask].copy()
+
+    clean_df = pd.concat([clean_keyed, df_no_key]).sort_index().copy()
     return clean_df, duplicates_df
 
 
@@ -168,73 +181,125 @@ def stage_2_fuzzy(
     inv_col_pr = "invoice_number_norm" if "invoice_number_norm" in pr_work.columns else None
     inv_col_g2b = "invoice_number_norm" if "invoice_number_norm" in g2b_work.columns else None
 
-    if not all([gstin_col_pr, gstin_col_g2b, inv_col_pr, inv_col_g2b]):
+    # Need at least invoice number columns OR supplier name columns to attempt matching
+    has_inv_cols = inv_col_pr and inv_col_g2b
+    has_name_cols = (
+        "supplier_name_norm" in pr_work.columns and
+        "supplier_name_norm" in g2b_work.columns
+    )
+    if not has_inv_cols and not has_name_cols:
         return pd.DataFrame(), pr_unmatched, g2b_unmatched
 
+    # Determine if GSTIN data is available in either dataset
+    pr_has_gstin = (
+        gstin_col_pr is not None and
+        pr_work[gstin_col_pr].apply(lambda v: str(v).strip() not in ("", "nan")).any()
+    )
+
     for pr_idx, pr_row in pr_work.iterrows():
-        pr_gstin = str(pr_row[gstin_col_pr])
-        pr_inv = str(pr_row[inv_col_pr])
+        pr_gstin = str(pr_row[gstin_col_pr]).strip() if gstin_col_pr else ""
+        pr_inv = str(pr_row[inv_col_pr]).strip() if inv_col_pr else ""
 
-        if not pr_gstin or not pr_inv:
-            continue
+        if pr_has_gstin and pr_gstin and pr_inv:
+            # Normal path: match by GSTIN group then fuzzy invoice number
+            gstin_mask = g2b_work[gstin_col_g2b] == pr_gstin
+            candidates = g2b_work[gstin_mask & ~g2b_work.index.isin(used_g2b_indices)]
 
-        # Filter g2b to same GSTIN
-        gstin_mask = g2b_work[gstin_col_g2b] == pr_gstin
-        candidates = g2b_work[gstin_mask & ~g2b_work.index.isin(used_g2b_indices)]
+            if candidates.empty:
+                continue
 
-        if candidates.empty:
-            continue
+            g2b_invoices = candidates[inv_col_g2b].tolist()
+            result = process.extractOne(
+                pr_inv,
+                g2b_invoices,
+                scorer=fuzz.token_set_ratio,
+                score_cutoff=fuzzy_threshold,
+            )
 
-        g2b_invoices = candidates[inv_col_g2b].tolist()
-        result = process.extractOne(
-            pr_inv,
-            g2b_invoices,
-            scorer=fuzz.token_set_ratio,
-            score_cutoff=fuzzy_threshold,
-        )
+            if not result:
+                continue
 
-        if result:
             matched_inv, score, match_pos = result
             g2b_idx = candidates.index[g2b_invoices.index(matched_inv)]
             g2b_row = g2b_work.loc[g2b_idx]
+        else:
+            # Fallback path (Tally / no-GSTIN exports): match by supplier name + invoice total
+            pr_name = str(pr_row.get("supplier_name_norm", "")).strip()
+            pr_total = float(pr_row.get("invoice_total", 0) or 0)
 
-            tax_delta = _compute_tax_delta(pr_row, g2b_row)
-            date_delta = _compute_date_delta(pr_row, g2b_row)
+            if not pr_name and pr_total == 0:
+                continue
 
-            category = categorize_match(
-                is_matched=True,
-                tax_delta=tax_delta,
-                tax_tolerance=tax_tolerance,
-                date_delta_days=date_delta,
-                invoice_norm_pr=pr_inv,
-                invoice_norm_g2b=str(g2b_row[inv_col_g2b]),
-                gstin_match=True,
-                is_fuzzy=True,
-            )
+            candidates = g2b_work[~g2b_work.index.isin(used_g2b_indices)]
+            if candidates.empty:
+                continue
 
-            conf = confidence(
-                inv_score=float(score),
-                gstin_match=True,
-                tax_delta=float(tax_delta) if tax_delta is not None else 0.0,
-                tax_tolerance=tax_tolerance,
-                vendor_score=vendor_similarity(
-                    str(pr_row.get("supplier_name_norm", "")),
-                    str(g2b_row.get("supplier_name_norm", "")),
-                ),
-            )
+            best_idx = None
+            best_name_score = 0
 
-            fuzzy_pairs.append({
-                "pr_idx": pr_idx,
-                "g2b_idx": g2b_idx,
-                "pr_row": pr_row,
-                "g2b_row": g2b_row,
-                "fuzzy_score": score,
-                "tax_delta": tax_delta,
-                "date_delta_days": date_delta,
-                "category": category,
-                "confidence": conf,
-            })
-            used_g2b_indices.add(g2b_idx)
+            for g2b_idx_cand, g2b_row_cand in candidates.iterrows():
+                g2b_name = str(g2b_row_cand.get("supplier_name_norm", "")).strip()
+                g2b_total = float(g2b_row_cand.get("invoice_total", 0) or 0)
+
+                name_score = fuzz.token_set_ratio(pr_name, g2b_name) if pr_name and g2b_name else 0
+                if name_score < fuzzy_threshold:
+                    continue
+
+                # Invoice total must match within 1%
+                if pr_total > 0 and g2b_total > 0:
+                    if abs(pr_total - g2b_total) / max(pr_total, g2b_total) > 0.01:
+                        continue
+                elif pr_total != g2b_total:
+                    continue
+
+                if name_score > best_name_score:
+                    best_name_score = name_score
+                    best_idx = g2b_idx_cand
+
+            if best_idx is None:
+                continue
+
+            g2b_row = g2b_work.loc[best_idx]
+            g2b_idx = best_idx
+            score = best_name_score
+
+        tax_delta = _compute_tax_delta(pr_row, g2b_row)
+        date_delta = _compute_date_delta(pr_row, g2b_row)
+
+        category = categorize_match(
+            is_matched=True,
+            tax_delta=tax_delta,
+            tax_tolerance=tax_tolerance,
+            date_delta_days=date_delta,
+            invoice_norm_pr=pr_inv,
+            invoice_norm_g2b=str(g2b_row.get(inv_col_g2b, "")) if inv_col_g2b else "",
+            gstin_match=(pr_gstin != "" and pr_gstin == str(g2b_row.get(gstin_col_g2b, "")).strip()),
+            is_fuzzy=True,
+        )
+
+        conf = confidence(
+            inv_score=float(score),
+            gstin_match=(pr_gstin != "" and pr_gstin == str(g2b_row.get(gstin_col_g2b, "")).strip()),
+            tax_delta=float(tax_delta) if tax_delta is not None else 0.0,
+            tax_tolerance=tax_tolerance,
+            vendor_score=vendor_similarity(
+                str(pr_row.get("supplier_name_norm", "")),
+                str(g2b_row.get("supplier_name_norm", "")),
+            ),
+        )
+
+        fuzzy_pairs.append({
+            "pr_idx": pr_idx,
+            "g2b_idx": g2b_idx,
+            "pr_row": pr_row,
+            "g2b_row": g2b_row,
+            "fuzzy_score": score,
+            "tax_delta": tax_delta,
+            "date_delta_days": date_delta,
+            "category": category,
+            "confidence": conf,
+        })
+        used_g2b_indices.add(g2b_idx)
 
     if not fuzzy_pairs:
         return pd.DataFrame(), pr_unmatched, g2b_unmatched
