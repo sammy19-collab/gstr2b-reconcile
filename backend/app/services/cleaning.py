@@ -68,7 +68,7 @@ def parse_date(value) -> Optional[pd.Timestamp]:
 
 def clean_purchase_df(df: pd.DataFrame) -> pd.DataFrame:
     """Normalize all key columns in a purchase register DataFrame."""
-    df = df.copy()
+    df = df.copy().reset_index(drop=True)
 
     if "invoice_number" in df.columns:
         df["invoice_number_norm"] = df["invoice_number"].apply(norm_invoice)
@@ -109,7 +109,7 @@ def clean_purchase_df(df: pd.DataFrame) -> pd.DataFrame:
 
 def clean_gstr2b_df(df: pd.DataFrame) -> pd.DataFrame:
     """Normalize all key columns in a GSTR-2B DataFrame."""
-    df = df.copy()
+    df = df.copy().reset_index(drop=True)
 
     if "invoice_number" in df.columns:
         df["invoice_number_norm"] = df["invoice_number"].apply(norm_invoice)

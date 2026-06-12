@@ -182,17 +182,37 @@ def auto_map(
 def apply_mapping(df: pd.DataFrame, mapping: Dict[str, str]) -> pd.DataFrame:
     """
     Apply column mapping to rename source columns to canonical names.
-    Only keeps columns that are in the mapping.
+    Handles duplicate column names by taking the last (rightmost) occurrence.
     """
+    # Deduplicate columns first — keep last occurrence of each name
+    df = df.copy()
+    if df.columns.duplicated().any():
+        seen = {}
+        new_cols = []
+        for i, c in enumerate(df.columns):
+            seen[c] = i
+        keep_indices = list(seen.values())
+        df = df.iloc[:, keep_indices]
+        # Re-deduplicate column names
+        cols = list(df.columns)
+        new_cols = []
+        count: Dict[str, int] = {}
+        for c in cols:
+            if cols.count(c) > 1:
+                count[c] = count.get(c, 0) + 1
+                new_cols.append(f"{c}_{count[c]}")
+            else:
+                new_cols.append(c)
+        df.columns = new_cols
+
     # Reverse map: source_col -> canonical
     reverse = {v: k for k, v in mapping.items()}
 
-    # Filter to only mapped columns
+    # Filter to only mapped columns that exist
     available = {src: canon for src, canon in reverse.items() if src in df.columns}
-
     if not available:
-        return df
+        return df.reset_index(drop=True)
 
     result = df[list(available.keys())].copy()
     result = result.rename(columns=available)
-    return result
+    return result.reset_index(drop=True)
