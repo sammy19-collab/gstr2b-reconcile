@@ -247,10 +247,20 @@ def _extract_side_data(row: pd.Series, suffix: str) -> Dict[str, Any]:
         if col.endswith(suffix):
             key = col[:-len(suffix)]
             val = row[col]
-            if isinstance(val, float) and np.isnan(val):
+            if val is None:
+                data[key] = None
+            elif isinstance(val, float) and np.isnan(val):
                 data[key] = None
             elif isinstance(val, pd.Timestamp):
                 data[key] = val.isoformat() if not pd.isna(val) else None
+            elif hasattr(val, 'isoformat'):
+                data[key] = val.isoformat()
+            elif isinstance(val, (np.integer,)):
+                data[key] = int(val)
+            elif isinstance(val, (np.floating,)):
+                data[key] = float(val) if not np.isnan(val) else None
+            elif isinstance(val, np.bool_):
+                data[key] = bool(val)
             else:
                 data[key] = val
     return data
