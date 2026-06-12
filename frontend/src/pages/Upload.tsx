@@ -51,12 +51,16 @@ export function Upload() {
 
       setStatus("Detecting column mapping for Purchase Register...");
       const prMapping = await getUploadMapping(pr.id);
+      await saveMapping(pr.id, prMapping.detected);
+
+      setStatus("Detecting column mapping for GSTR-2B...");
+      const g2bMapping = await getUploadMapping(g2b.id);
+      await saveMapping(g2b.id, g2bMapping.detected);
+
       if (prMapping.unresolved.length > 0) {
         setMappingData(prMapping);
         setMappingUploadId(pr.id);
         setShowMapping(true);
-      } else {
-        await saveMapping(pr.id, prMapping.detected);
       }
 
       setStatus("Files uploaded successfully!");
