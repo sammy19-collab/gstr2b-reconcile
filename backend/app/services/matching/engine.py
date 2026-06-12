@@ -247,48 +247,47 @@ def _extract_side_data(row: pd.Series, suffix: str) -> Dict[str, Any]:
         if col.endswith(suffix):
             key = col[:-len(suffix)]
             val = row[col]
-            if val is None:
-                data[key] = None
-            elif isinstance(val, float) and np.isnan(val):
-                data[key] = None
-            elif isinstance(val, pd.Timestamp):
-                data[key] = val.isoformat() if not pd.isna(val) else None
-            elif hasattr(val, 'isoformat'):
-                data[key] = val.isoformat()
-            elif isinstance(val, (np.integer,)):
-                data[key] = int(val)
-            elif isinstance(val, (np.floating,)):
-                data[key] = float(val) if not np.isnan(val) else None
-            elif isinstance(val, np.bool_):
-                data[key] = bool(val)
-            else:
-                data[key] = val
+            data[key] = _safe_scalar(val)
     return data
+
+
+def _safe_scalar(val: Any) -> Any:
+    """Convert any value to a JSON-serializable scalar."""
+    # Unwrap Series/arrays — take first non-null value
+    if isinstance(val, pd.Series):
+        non_null = val.dropna()
+        val = non_null.iloc[0] if not non_null.empty else None
+    if isinstance(val, np.ndarray):
+        val = val.flat[0] if val.size > 0 else None
+
+    if val is None:
+        return None
+    if isinstance(val, float) and np.isnan(val):
+        return None
+    if isinstance(val, pd.Timestamp):
+        return val.isoformat() if not pd.isna(val) else None
+    if hasattr(val, 'isoformat'):
+        return val.isoformat()
+    if isinstance(val, np.integer):
+        return int(val)
+    if isinstance(val, np.floating):
+        return float(val) if not np.isnan(val) else None
+    if isinstance(val, np.bool_):
+        return bool(val)
+    # Final fallback: convert anything still not JSON-safe to string
+    try:
+        import json
+        json.dumps(val)
+        return val
+    except (TypeError, ValueError):
+        return str(val)
 
 
 def _row_to_dict(row: pd.Series) -> Dict[str, Any]:
     """Convert a Series row to a JSON-serializable dict."""
     if row is None:
         return {}
-    result = {}
-    for col, val in row.items():
-        if val is None:
-            result[col] = None
-        elif isinstance(val, float) and np.isnan(val):
-            result[col] = None
-        elif isinstance(val, pd.Timestamp):
-            result[col] = val.isoformat() if not pd.isna(val) else None
-        elif hasattr(val, 'isoformat'):  # datetime, date objects
-            result[col] = val.isoformat()
-        elif isinstance(val, (np.integer,)):
-            result[col] = int(val)
-        elif isinstance(val, (np.floating,)):
-            result[col] = float(val) if not np.isnan(val) else None
-        elif isinstance(val, np.bool_):
-            result[col] = bool(val)
-        else:
-            result[col] = val
-    return result
+    return {col: _safe_scalar(val) for col, val in row.items()}
 
 
 def _compute_vendor_analytics(
