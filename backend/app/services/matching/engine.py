@@ -262,14 +262,20 @@ def _row_to_dict(row: pd.Series) -> Dict[str, Any]:
         return {}
     result = {}
     for col, val in row.items():
-        if isinstance(val, float) and np.isnan(val):
+        if val is None:
+            result[col] = None
+        elif isinstance(val, float) and np.isnan(val):
             result[col] = None
         elif isinstance(val, pd.Timestamp):
             result[col] = val.isoformat() if not pd.isna(val) else None
+        elif hasattr(val, 'isoformat'):  # datetime, date objects
+            result[col] = val.isoformat()
         elif isinstance(val, (np.integer,)):
             result[col] = int(val)
         elif isinstance(val, (np.floating,)):
-            result[col] = float(val)
+            result[col] = float(val) if not np.isnan(val) else None
+        elif isinstance(val, np.bool_):
+            result[col] = bool(val)
         else:
             result[col] = val
     return result
