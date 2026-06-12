@@ -16,6 +16,18 @@ router = APIRouter()
 settings = get_settings()
 
 
+@router.get("/", response_model=list[UploadOut])
+def list_uploads(
+    client_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    q = db.query(Upload).filter(Upload.uploader_id == current_user.id)
+    if client_id:
+        q = q.filter(Upload.client_id == client_id)
+    return q.order_by(Upload.created_at.desc()).all()
+
+
 @router.post("/", response_model=UploadOut, status_code=status.HTTP_201_CREATED)
 async def upload_file(
     client_id: int = Form(...),
