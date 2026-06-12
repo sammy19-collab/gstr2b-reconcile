@@ -23,7 +23,7 @@ services:
 
   api:
     build: ./backend
-    command: gunicorn app.main:app -k uvicorn.workers.UvicornWorker -w 4 -b 0.0.0.0:8000
+    command: ./start.sh
     env_file: .env
     volumes:
       - uploads:/app/uploads
