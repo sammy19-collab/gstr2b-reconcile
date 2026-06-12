@@ -23,7 +23,7 @@ services:
 
   api:
     build: ./backend
-    command: ./start.sh
+    command: bash -c "alembic upgrade head && gunicorn app.main:app -k uvicorn.workers.UvicornWorker -w 4 -b 0.0.0.0:8000"
     env_file: .env
     volumes:
       - uploads:/app/uploads
