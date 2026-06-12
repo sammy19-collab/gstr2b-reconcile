@@ -41,34 +41,52 @@ FIELD_ALIASES: Dict[str, List[str]] = {
         "invoice_number", "invoice no", "invoice_no", "inv no", "inv_no",
         "bill number", "bill_number", "doc_number", "document number",
         "voucher number", "voucher no", "invoice ref",
+        # Tally export
+        "vch no.", "vch no", "voucher no.", "vch number",
+        # GSTR-2B merged header
+        "invoice number",
     ],
     "invoice_date": [
         "invoice_date", "invoice date", "inv date", "inv_date",
         "bill date", "document date", "voucher date", "date",
+        # GSTR-2B merged header
+        "invoice date",
     ],
     "supplier_gstin": [
         "supplier_gstin", "supplier gstin", "gstin", "vendor gstin",
         "supplier gst", "party gstin", "gstin of supplier",
         "counter party gstin", "ctin",
+        # GSTR-2B exact column
+        "gstin of supplier",
     ],
     "supplier_name": [
         "supplier_name", "supplier name", "vendor name", "party name",
         "counter party name", "supplier", "vendor", "ledger name",
+        # Tally export
+        "particulars",
+        # GSTR-2B
+        "trade/legal name",
     ],
     "taxable_amount": [
         "taxable_amount", "taxable amount", "taxable value", "assessable value",
         "basic amount", "base amount", "net amount",
+        # GSTR-2B
+        "taxable value (₹)", "taxable value",
+        # Tally: credit amount is the invoice total
+        "credit", "amount", "credit amount",
     ],
     "igst": [
-        "igst", "igst amount", "integrated tax", "integrated gst",
-        "igst_amount",
+        "igst", "igst amount", "integrated tax", "integrated gst", "igst_amount",
+        "integrated tax(₹)",
     ],
     "cgst": [
         "cgst", "cgst amount", "central tax", "central gst", "cgst_amount",
+        "central tax(₹)",
     ],
     "sgst": [
         "sgst", "sgst amount", "state tax", "state gst", "sgst_amount",
         "utgst", "utgst amount",
+        "state/ut tax(₹)",
     ],
     "total_tax": [
         "total_tax", "total tax", "tax amount", "gst amount", "total gst",
@@ -76,22 +94,24 @@ FIELD_ALIASES: Dict[str, List[str]] = {
     ],
     "invoice_type": [
         "invoice_type", "invoice type", "supply type", "type",
-        "transaction type",
+        "transaction type", "vch type",
+        "invoice type",
     ],
     "place_of_supply": [
         "place_of_supply", "place of supply", "pos", "state code",
-        "destination state",
+        "destination state", "place of supply",
     ],
     "reverse_charge": [
         "reverse_charge", "reverse charge", "rcm", "is_rcm",
+        "supply attract reverse charge",
     ],
     "itc_availability": [
         "itc_availability", "itc availability", "itc", "itc eligible",
-        "eligible for itc",
+        "eligible for itc", "itc availability",
     ],
     "reason": [
         "reason", "reason for ineligibility", "ineligibility reason",
-        "remarks",
+        "remarks", "remark",
     ],
 }
 
