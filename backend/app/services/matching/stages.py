@@ -163,6 +163,15 @@ def stage_2_fuzzy(
         pr_residual: still-unmatched purchase invoices
         g2b_residual: still-unmatched GSTR-2B invoices
     """
+    import logging
+    log = logging.getLogger(__name__)
+    log.info(f"[Stage2] PR rows={len(pr_unmatched)}, G2B rows={len(g2b_unmatched)}")
+    log.info(f"[Stage2] PR cols={list(pr_unmatched.columns)}")
+    log.info(f"[Stage2] G2B cols={list(g2b_unmatched.columns)}")
+    if not pr_unmatched.empty:
+        log.info(f"[Stage2] PR sample: supplier_name_norm={pr_unmatched.get('supplier_name_norm', ['N/A']).tolist()}, invoice_total={pr_unmatched.get('invoice_total', ['N/A']).tolist()}")
+    if not g2b_unmatched.empty:
+        log.info(f"[Stage2] G2B sample: supplier_name_norm={g2b_unmatched.get('supplier_name_norm', ['N/A']).tolist()}, invoice_total={g2b_unmatched.get('invoice_total', ['N/A']).tolist()}")
     if pr_unmatched.empty or g2b_unmatched.empty:
         return pd.DataFrame(), pr_unmatched, g2b_unmatched
 
