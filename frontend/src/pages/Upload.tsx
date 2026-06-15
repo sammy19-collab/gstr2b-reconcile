@@ -57,12 +57,6 @@ export function Upload() {
       const g2bMapping = await getUploadMapping(g2b.id);
       await saveMapping(g2b.id, g2bMapping.detected);
 
-      if (prMapping.unresolved.length > 0) {
-        setMappingData(prMapping);
-        setMappingUploadId(pr.id);
-        setShowMapping(true);
-      }
-
       setStatus("Files uploaded successfully!");
     } catch (err: unknown) {
       const msg =
