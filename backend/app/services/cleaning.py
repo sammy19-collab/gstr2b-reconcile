@@ -91,13 +91,14 @@ def clean_purchase_df(df: pd.DataFrame) -> pd.DataFrame:
         else:
             df[amt_col] = 0.0
 
-    # Compute total_tax if not present
-    if "total_tax" not in df.columns or df["total_tax"].isna().all():
-        df["total_tax"] = (
-            df.get("igst", pd.Series(0, index=df.index)).fillna(0)
-            + df.get("cgst", pd.Series(0, index=df.index)).fillna(0)
-            + df.get("sgst", pd.Series(0, index=df.index)).fillna(0)
-        )
+    # Recompute total_tax from components when available
+    computed_tax = (
+        df["igst"].fillna(0) + df["cgst"].fillna(0) + df["sgst"].fillna(0)
+    )
+    if computed_tax.sum() > 0:
+        df["total_tax"] = computed_tax
+    elif df["total_tax"].isna().all():
+        df["total_tax"] = 0.0
 
     if "invoice_date" in df.columns:
         df["invoice_date"] = df["invoice_date"].apply(parse_date)
@@ -135,12 +136,14 @@ def clean_gstr2b_df(df: pd.DataFrame) -> pd.DataFrame:
         else:
             df[amt_col] = 0.0
 
-    if "total_tax" not in df.columns or df["total_tax"].isna().all():
-        df["total_tax"] = (
-            df.get("igst", pd.Series(0, index=df.index)).fillna(0)
-            + df.get("cgst", pd.Series(0, index=df.index)).fillna(0)
-            + df.get("sgst", pd.Series(0, index=df.index)).fillna(0)
-        )
+    # Always recompute total_tax from components when they have values
+    computed_tax = (
+        df["igst"].fillna(0) + df["cgst"].fillna(0) + df["sgst"].fillna(0)
+    )
+    if computed_tax.sum() > 0:
+        df["total_tax"] = computed_tax
+    elif df["total_tax"].isna().all():
+        df["total_tax"] = 0.0
 
     if "invoice_date" in df.columns:
         df["invoice_date"] = df["invoice_date"].apply(parse_date)
